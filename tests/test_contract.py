@@ -77,13 +77,10 @@ def test_metadata_includes_capabilities():
 # ── lifecycle ─────────────────────────────────────────────────
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_start_stop_lifecycle(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_start_stop_lifecycle(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
 
     comp, mqtt = _make()
     comp.start()
@@ -93,40 +90,35 @@ def test_start_stop_lifecycle(mock_find, mock_serial_cls):
     comp.stop()
     assert comp.state.status == ComponentStatus.STOPPED
     assert comp.state.stopped_at is not None
-    mock_ser.close.assert_called_once()
 
 
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value=None)
-def test_start_fails_no_serial(mock_find):
-    comp, _ = _make()
-    with pytest.raises(RuntimeError, match="No serial port"):
-        comp.start()
-    assert comp.state.status == ComponentStatus.FAILED
+@patch("lucid_component_projector.component.helper_client")
+def test_start_when_helper_unavailable(mock_helper):
+    mock_helper.ping.return_value = {"ok": False, "error": "connection refused"}
+    mock_helper.status.return_value = {"ok": False, "error": "connection refused"}
 
-
-@patch("lucid_component_projector.component.ProjectorSerial")
-def test_start_with_configured_port(mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB1"
-    mock_serial_cls.return_value = mock_ser
-
-    comp, _ = _make(cfg={"serial_port": "/dev/ttyUSB1"})
+    comp, mqtt = _make()
     comp.start()
-    mock_serial_cls.assert_called_once_with(
-        port="/dev/ttyUSB1", baudrate=9600, timeout=1.0,
-    )
+    assert comp.state.status == ComponentStatus.RUNNING
+    state = comp.get_state_payload()
+    assert state["connected"] is False
+    assert state["helper_available"] is False
     comp.stop()
 
 
 # ── state & config ────────────────────────────────────────────
 
 
-def test_get_state_payload_not_connected():
+@patch("lucid_component_projector.component.helper_client")
+def test_get_state_payload(mock_helper):
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+
     comp, _ = _make()
+    comp._refresh_status()
     state = comp.get_state_payload()
-    assert state["connected"] is False
-    assert state["serial_port"] is None
+    assert state["connected"] is True
+    assert state["serial_port"] == "/dev/ttyUSB0"
+    assert state["helper_available"] is True
 
 
 def test_get_cfg_payload():
@@ -139,68 +131,60 @@ def test_get_cfg_payload():
 # ── command handlers ──────────────────────────────────────────
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_power_on(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_power_on(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": True}
 
     comp, mqtt = _make()
     comp.start()
     comp.on_cmd_power_on(json.dumps({"request_id": "r1"}))
 
-    mock_ser.send.assert_called_with("on", None)
+    mock_helper.send.assert_called_with("on", None)
     result = mqtt.last_payload_for("evt/power/on/result")
     assert result["request_id"] == "r1"
     assert result["ok"] is True
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_power_off(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_power_off(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": True}
 
     comp, mqtt = _make()
     comp.start()
     comp.on_cmd_power_off(json.dumps({"request_id": "r2"}))
 
-    mock_ser.send.assert_called_with("off", None)
+    mock_helper.send.assert_called_with("off", None)
     result = mqtt.last_payload_for("evt/power/off/result")
     assert result["ok"] is True
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_navigate_enter(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_navigate_enter(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": True}
 
     comp, mqtt = _make()
     comp.start()
     comp.on_cmd_navigate_enter(json.dumps({"request_id": "r3"}))
 
-    mock_ser.send.assert_called_with("enter", None)
+    mock_helper.send.assert_called_with("enter", None)
     result = mqtt.last_payload_for("evt/navigate/enter/result")
     assert result["ok"] is True
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_keystone_set(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_keystone_set(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": True}
 
     comp, mqtt = _make()
     comp.start()
@@ -208,19 +192,16 @@ def test_keystone_set(mock_find, mock_serial_cls):
         "request_id": "r4", "axis": "h", "value": -10,
     }))
 
-    mock_ser.send.assert_called_with("h-keystone", -10)
+    mock_helper.send.assert_called_with("h-keystone", -10)
     result = mqtt.last_payload_for("evt/keystone/set/result")
     assert result["ok"] is True
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_keystone_set_missing_axis(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_keystone_set_missing_axis(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
 
     comp, mqtt = _make()
     comp.start()
@@ -232,13 +213,11 @@ def test_keystone_set_missing_axis(mock_find, mock_serial_cls):
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_image_shift_set(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_image_shift_set(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": True}
 
     comp, mqtt = _make()
     comp.start()
@@ -246,29 +225,17 @@ def test_image_shift_set(mock_find, mock_serial_cls):
         "request_id": "r6", "axis": "v", "value": 50,
     }))
 
-    mock_ser.send.assert_called_with("v-image-shift", 50)
+    mock_helper.send.assert_called_with("v-image-shift", 50)
     result = mqtt.last_payload_for("evt/image-shift/set/result")
     assert result["ok"] is True
     comp.stop()
 
 
-def test_command_when_not_connected():
-    comp, mqtt = _make()
-    # Don't start — serial is None
-    comp.on_cmd_power_on(json.dumps({"request_id": "r7"}))
-    result = mqtt.last_payload_for("evt/power/on/result")
-    assert result["ok"] is False
-    assert "not connected" in result["error"]
-
-
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_serial_error_returns_failure(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_ser.send.side_effect = OSError("device disconnected")
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_helper_error_returns_failure(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.send.return_value = {"ok": False, "error": "device disconnected"}
 
     comp, mqtt = _make()
     comp.start()
@@ -283,13 +250,10 @@ def test_serial_error_returns_failure(mock_find, mock_serial_cls):
 # ── ping & reset ──────────────────────────────────────────────
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_ping(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_ping(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
 
     comp, mqtt = _make()
     comp.start()
@@ -299,20 +263,17 @@ def test_ping(mock_find, mock_serial_cls):
     comp.stop()
 
 
-@patch("lucid_component_projector.component.ProjectorSerial")
-@patch("lucid_component_projector.component.find_usb_serial_device", return_value="/dev/ttyUSB0")
-def test_reset_reconnects(mock_find, mock_serial_cls):
-    mock_ser = MagicMock()
-    mock_ser.is_open = True
-    mock_ser.port = "/dev/ttyUSB0"
-    mock_serial_cls.return_value = mock_ser
+@patch("lucid_component_projector.component.helper_client")
+def test_reset_reconnects(mock_helper):
+    mock_helper.ping.return_value = {"ok": True}
+    mock_helper.status.return_value = {"ok": True, "connected": True, "port": "/dev/ttyUSB0"}
+    mock_helper.reset.return_value = {"ok": True, "port": "/dev/ttyUSB0"}
 
     comp, mqtt = _make()
     comp.start()
     comp.on_cmd_reset(json.dumps({"request_id": "rr"}))
 
-    mock_ser.close.assert_called()
-    mock_ser.open.assert_called()
+    mock_helper.reset.assert_called_once()
     result = mqtt.last_payload_for("evt/reset/result")
     assert result["ok"] is True
     comp.stop()

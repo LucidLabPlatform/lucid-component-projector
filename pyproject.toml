@@ -18,6 +18,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest"]
 
+[project.scripts]
+lucid-projector-helper = "lucid_component_projector.helper_server:main"
+lucid-projector-helper-installer = "lucid_component_projector.helper_installer:main"
+
 [project.entry-points."lucid_components"]
 projector = "lucid_component_projector.component:ProjectorComponent"
 
@@ -27,6 +31,9 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["lucid_component_projector*"]
+
+[tool.setuptools.package-data]
+lucid_component_projector = ["systemd/*.service"]
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"
