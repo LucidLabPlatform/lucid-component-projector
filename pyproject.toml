@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "setuptools_scm[toml]>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lucid-component-projector"
+dynamic = ["version"]
+description = "LUCID component for Optoma projector control via RS232 serial."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{ name = "LUCID" }]
+dependencies = [
+  "lucid-component-base @ git+https://github.com/LucidLabPlatform/lucid-component-base@v2.0.0",
+  "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.entry-points."lucid_components"]
+projector = "lucid_component_projector.component:ProjectorComponent"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lucid_component_projector*"]
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
+fallback_version = "0.0.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
