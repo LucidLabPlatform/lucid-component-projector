@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import threading
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -76,6 +77,61 @@ class ProjectorComponent(Component):
         out["capabilities"] = self.capabilities()
         return out
 
+    def schema(self) -> dict[str, Any]:
+        s = deepcopy(super().schema())
+
+        # -- publishes ---------------------------------------------------
+        s["publishes"]["state"]["fields"].update({
+            "connected": {"type": "boolean"},
+            "serial_port": {"type": "string"},
+            "helper_available": {"type": "boolean"},
+        })
+        s["publishes"]["cfg"]["fields"].update({
+            "serial_port": {"type": "string"},
+            "baudrate": {"type": "integer"},
+        })
+        s["publishes"]["telemetry/connected"] = {
+            "fields": {"value": {"type": "boolean"}},
+        }
+
+        # -- subscribes --------------------------------------------------
+        for action in (
+            "cmd/power/on", "cmd/power/off",
+            "cmd/input/hdmi1", "cmd/input/hdmi2",
+            "cmd/aspect/4-3", "cmd/aspect/16-9",
+            "cmd/navigate/up", "cmd/navigate/down",
+            "cmd/navigate/left", "cmd/navigate/right",
+            "cmd/navigate/enter", "cmd/navigate/menu",
+            "cmd/navigate/back",
+        ):
+            s["subscribes"][action] = {"fields": {}}
+
+        s["subscribes"]["cmd/keystone/set"] = {
+            "fields": {
+                "axis": {"type": "string", "enum": ["h", "v"]},
+                "value": {"type": "integer"},
+            },
+        }
+        s["subscribes"]["cmd/image-shift/set"] = {
+            "fields": {
+                "axis": {"type": "string", "enum": ["h", "v"]},
+                "value": {"type": "integer"},
+            },
+        }
+        s["subscribes"]["cmd/cfg/set"] = {
+            "fields": {
+                "set": {
+                    "type": "object",
+                    "fields": {
+                        "serial_port": {"type": "string"},
+                        "baudrate": {"type": "integer"},
+                    },
+                },
+            },
+        }
+
+        return s
+
     def get_state_payload(self) -> dict[str, Any]:
         return {
             "connected": self._last_status.get("connected", False),
@@ -108,10 +164,11 @@ class ProjectorComponent(Component):
 
     def _publish_all_retained(self) -> None:
         self.publish_metadata()
+        self.publish_schema()
         self.publish_status()
         self.publish_state()
         self.set_telemetry_config({
-            "connected": {"enabled": True, "interval_s": 10, "change_threshold_percent": 0},
+            "connected": {"enabled": False, "interval_s": 0.1, "change_threshold_percent": 0},
         })
         self.publish_cfg()
 
