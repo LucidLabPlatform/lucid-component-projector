@@ -1,8 +1,7 @@
 """Contract tests for ProjectorComponent: lifecycle, state, commands."""
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
 from lucid_component_base import ComponentContext, ComponentStatus
 
 from lucid_component_projector import ProjectorComponent
