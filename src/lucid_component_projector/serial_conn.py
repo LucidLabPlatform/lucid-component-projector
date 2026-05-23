@@ -90,14 +90,14 @@ class ProjectorSerial:
 
     def send_static(self, command: str) -> None:
         """Send a static command (no parameters). Raises KeyError if unknown."""
-        key = command.lower()
+        key = command
         if key not in STATIC_COMMANDS:
             raise KeyError(f"Unknown static command: {command}")
         self._write(STATIC_COMMANDS[key])
 
     def send_dynamic(self, command: str, value: int) -> None:
         """Send a dynamic command with an integer value. Validates range."""
-        key = command.lower()
+        key = command
         if key not in DYNAMIC_COMMANDS:
             raise KeyError(f"Unknown dynamic command: {command}")
         template, min_val, max_val = DYNAMIC_COMMANDS[key]

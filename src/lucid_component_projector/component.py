@@ -290,45 +290,40 @@ class ProjectorComponent(Component):
         _, request_id = self._parse_payload(payload_str)
         self._send_cmd("navigate/back", request_id, "back")
 
-    # ── keystone commands ─────────────────────────────────────
+    # ── axis-value command helper ─────────────────────────────
 
-    def on_cmd_keystone_set(self, payload_str: str) -> None:
-        """Payload: { request_id, axis: "h"|"v", value: int }"""
+    def _send_axis_cmd(self, action: str, prefix: str, payload_str: str) -> None:
+        """Validate axis/value payload and dispatch an axis-prefixed command.
+
+        ``prefix`` is combined with the axis to build the RS232 command key,
+        e.g. prefix ``"keystone"`` + axis ``"h"`` → command ``"h-keystone"``.
+        """
         payload, request_id = self._parse_payload(payload_str)
         axis = payload.get("axis", "").lower()
         value = payload.get("value")
 
         if axis not in ("h", "v"):
-            self.publish_result("keystone/set", request_id, ok=False,
+            self.publish_result(action, request_id, ok=False,
                                 error="'axis' must be 'h' or 'v'")
             return
         if value is None:
-            self.publish_result("keystone/set", request_id, ok=False,
+            self.publish_result(action, request_id, ok=False,
                                 error="'value' is required")
             return
 
-        command = f"{axis}-keystone"
-        self._send_cmd("keystone/set", request_id, command, int(value))
+        self._send_cmd(action, request_id, f"{axis}-{prefix}", int(value))
+
+    # ── keystone commands ─────────────────────────────────────
+
+    def on_cmd_keystone_set(self, payload_str: str) -> None:
+        """Payload: { request_id, axis: "h"|"v", value: int }"""
+        self._send_axis_cmd("keystone/set", "keystone", payload_str)
 
     # ── image shift commands ──────────────────────────────────
 
     def on_cmd_image_shift_set(self, payload_str: str) -> None:
         """Payload: { request_id, axis: "h"|"v", value: int }"""
-        payload, request_id = self._parse_payload(payload_str)
-        axis = payload.get("axis", "").lower()
-        value = payload.get("value")
-
-        if axis not in ("h", "v"):
-            self.publish_result("image-shift/set", request_id, ok=False,
-                                error="'axis' must be 'h' or 'v'")
-            return
-        if value is None:
-            self.publish_result("image-shift/set", request_id, ok=False,
-                                error="'value' is required")
-            return
-
-        command = f"{axis}-image-shift"
-        self._send_cmd("image-shift/set", request_id, command, int(value))
+        self._send_axis_cmd("image-shift/set", "image-shift", payload_str)
 
     # ── config command ────────────────────────────────────────
 
